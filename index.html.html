@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Logo Snow — Smooth 30s Recording</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#0f1724cc;
+      --accent:#7dd3fc;
+      --muted:#9aa7b3;
+      --glass: rgba(255,255,255,0.03);
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;}
+    body{
+      background: linear-gradient(180deg,#071021 0%, #0a1b2b 100%);
+      color:#e6eef6;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+      box-sizing:border-box;
+    }
+    .card{
+      width:100%;
+      max-width:1100px;
+      height:720px;
+      border-radius:14px;
+      overflow:hidden;
+      display:grid;
+      grid-template-columns: 330px 1fr;
+      box-shadow: 0 10px 40px rgba(3,7,18,0.6);
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    }
+    .controls{
+      padding:20px;
+      background:var(--panel);
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    h1{font-size:18px;margin:0 0 6px 0;}
+    p.desc{margin:0;font-size:13px;color:var(--muted);}
+    .fileRow{
+      margin-top:8px;
+      padding:12px;
+      background:var(--glass);
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.02);
+    }
+    input[type=file]{width:100%}
+    label.rangeLabel{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-top:8px}
+    input[type=range]{width:100%}
+    .btn{
+      margin-top:6px;
+      display:inline-block;
+      padding:9px 12px;
+      border-radius:9px;
+      background:linear-gradient(90deg,var(--accent),#60a5fa);
+      color:#021024;
+      font-weight:600;
+      border:none;
+      cursor:pointer;
+      box-shadow: 0 6px 18px rgba(32, 129, 226, 0.12);
+    }
+    #stage{
+      position:relative;
+      overflow:hidden;
+    }
+    #tsparticles{
+      width:100%;
+      height:100%;
+      display:block;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/tsparticles@2.12.0/tsparticles.bundle.min.js"></script>
+</head>
+<body>
+  <div class="card">
+    <div class="controls">
+      <h1>Logo Snow — Smooth 30s Recording</h1>
+      <p class="desc">Your uploaded logo becomes falling snowflakes. Export as smooth 30-second WebM.</p>
+
+      <div class="fileRow">
+        <input id="logoFile" type="file" accept="image/*" />
+      </div>
+
+      <label class="rangeLabel">Density <span id="densityVal">100</span></label>
+      <input id="density" type="range" min="20" max="600" value="100" />
+
+      <label class="rangeLabel">Size (px) <span id="sizeVal">28</span></label>
+      <input id="size" type="range" min="8" max="120" value="28" />
+
+      <label class="rangeLabel">Fall speed <span id="speedVal">2</span></label>
+      <input id="speed" type="range" min="0.2" max="8" step="0.1" value="2" />
+
+      <label class="rangeLabel">Drift <span id="driftVal">30%</span></label>
+      <input id="drift" type="range" min="0" max="100" value="30" />
+
+      <button id="resetBtn" class="btn">Load demo logo</button>
+      <button id="recordBtn" class="btn">🎥 Record 30-second WebM</button>
+    </div>
+
+    <div id="stage">
+      <canvas id="tsparticles"></canvas>
+    </div>
+  </div>
+
+<script>
+let tsInstance; // store current tsParticles instance
+
+const defaultImage = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+`<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'>
+  <rect width='100%' height='100%' rx='32' fill='#0ea5a4'/>
+  <text x='50%' y='50%' font-size='64' font-weight='700' fill='white'
+    text-anchor='middle' dominant-baseline='middle'>JS</text>
+</svg>`);
+
+const fileInput = document.getElementById('logoFile');
+const density = document.getElementById('density');
+const sizeSlider = document.getElementById('size');
+const speed = document.getElementById('speed');
+const drift = document.getElementById('drift');
+
+const densityVal = document.getElementById('densityVal');
+const sizeVal = document.getElementById('sizeVal');
+const speedVal = document.getElementById('speedVal');
+const driftVal = document.getElementById('driftVal');
+const resetBtn = document.getElementById('resetBtn');
+const recordBtn = document.getElementById('recordBtn');
+
+function syncLabels(){
+  densityVal.textContent = density.value;
+  sizeVal.textContent = sizeSlider.value;
+  speedVal.textContent = speed.value;
+  driftVal.textContent = drift.value + '%';
+}
+[density,sizeSlider,speed,drift].forEach(el => el.oninput = syncLabels);
+syncLabels();
+
+let currentImage = defaultImage;
+
+function buildOptions(img){
+  return {
+    fpsLimit: 60,
+    detectRetina: true,
+    particles: {
+      number: { value: Number(density.value) },
+      shape: { type: "image", image: [{ src: img, width: 64, height: 64 }] },
+      size: { value: Number(sizeSlider.value) },
+      opacity: { value: { min: 0.5, max: 1 } },
+      move: {
+        enable: true,
+        direction: "bottom",
+        speed: Number(speed.value),
+        gravity: { enable: false }, // constant speed
+        random: { enable: true, minimumValue: Number(drift.value)/100 },
+        straight: false,
+        outModes: { default: "out" }
+      },
+      rotate: { value: { min: 0, max: 360 }, animation: { enable: true, speed: 5 } }
+    }
+  };
+}
+
+async function init(img){
+  currentImage = img;
+  // destroy previous instance if exists
+  if(tsInstance){
+    await tsInstance.destroy();
+  }
+  tsInstance = await tsParticles.load("tsparticles", buildOptions(img));
+}
+
+fileInput.onchange = e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => init(ev.target.result);
+  reader.readAsDataURL(file);
+};
+
+[density,sizeSlider,speed,drift].forEach(sl => {
+  sl.addEventListener("input", () => init(currentImage));
+});
+
+resetBtn.onclick = () => init(defaultImage);
+
+// RECORDING FEATURE
+recordBtn.onclick = async () => {
+  const canvas = document.querySelector("#tsparticles > canvas") || document.querySelector("#tsparticles");
+  if(!canvas){
+    alert("Canvas not ready yet!");
+    return;
+  }
+
+  const stream = canvas.captureStream(30); // 30fps
+  const chunks = [];
+  const recorder = new MediaRecorder(stream, { mimeType: "video/webm; codecs=vp9" });
+
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "logo-snow.webm";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  recorder.start();
+  recordBtn.textContent = "Recording…";
+  recordBtn.disabled = true;
+
+  await new Promise(res => setTimeout(res, 30000)); // 30 seconds
+
+  recorder.stop();
+  recordBtn.textContent = "🎥 Record 30-second WebM";
+  recordBtn.disabled = false;
+};
+
+window.onload = () => init(defaultImage);
+</script>
+</body>
+</html>
